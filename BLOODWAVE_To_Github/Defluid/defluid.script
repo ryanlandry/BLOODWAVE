@@ -1,0 +1,195 @@
+-------------
+-- DEFLUID --
+-------------
+
+-- Defluid is a premade game object that can be perceived as
+-- a factory of particles with a special material on theirs sprites
+-- that are rendered together with anything else (sprites, tiles)
+-- on the render target defluid_plane (include it in your collection)
+-- It utilizes the rendercam, so include a camera in your collection too.
+
+-- Created by Pawel Jarosz 2019 (MIT license - A short, permissive software license.
+-- You are free to do whatever you want as long as you include the original copyright
+-- and license notice in any copy of the software/source.)
+
+
+go.property("num_of_metaballs", 10)
+go.property("scale_of_metaball", 1)
+go.property("emitter_width", 50)
+go.property("emitter_height", 50)
+go.property("dry_each_after", 0)
+go.property("create_at_init", true)
+go.property("debug_physics", false)
+
+local ACTIVATE = hash("activate")
+local DRY = hash("dry")
+local CHANGE = hash("change")
+local FORCE = hash("force")
+local REMOVE = hash("remove")
+
+
+
+function update(self,dt)
+
+
+	if #self.scabs >= 1 then
+		local pos = vmath.vector3()
+		for i = #self.scabs, 1, -1 do
+			pos = go.get_position(self.scabs[i].id)
+			pos.y = pos.y - 0.5*G_SPEED
+			pos.z = 0
+			go.set_position(pos, self.scabs[i].id)
+			if pos.y < -100 then
+				go.delete(self.scabs[i].id)
+				table.remove(self.scabs, i)
+			end
+		end
+	end
+
+end
+
+
+local function cast_scab(self)
+	if G_MANA >= 24 then
+		local total = #self.metaballs
+		if total <= 10 then total = 10 return end
+		if total > 10 then total = 10 end
+		for i = 1, total do
+			sprite.set_constant(self.metaballs[1].sprite, "tint", vmath.vector4(50/255,3/255,10/255,1))
+			msg.post(self.metaballs[1].url, "disable")
+			table.insert(self.scabs, self.metaballs[1])
+			table.remove(self.metaballs, 1)
+		end
+		msg.post("/GUI", "big_scab")
+	end
+
+	
+end
+
+
+local function dry_metaballs(self)
+	self.i = 1
+	if self.dry_each_after ~= 0 then 
+		self.tim = timer.delay(self.dry_each_after, true, function()
+			if self.i <= self.num_of_metaballs then
+				local metaball = table.remove(self.metaballs)
+				go.animate(msg.url(metaball.id), "scale", go.PLAYBACK_ONCE_FORWARD,
+				0, go.EASING_INOUTSINE, self.dry_each_after, 0, function()
+					go.delete(metaball) end)
+					self.i = self.i + 1
+			else
+				timer.cancel(self.tim)
+				self.tim = nil
+				self.i = nil
+			end
+		end)
+	end
+end
+
+local function create_metaballs(self)
+
+	math.randomseed (os.time())
+	self.scale_of_metaball = vmath.vector3(self.scale_of_metaball)
+
+	for i = 1,self.num_of_metaballs do
+		local pos = go.get_position()
+		pos.x = pos.x - (self.emitter_width/2) + math.random()*self.emitter_width
+		pos.y = pos.y - (self.emitter_height/2) + math.random()*self.emitter_height
+		pos.z = -0.1
+		ball = {}
+		ball.id = factory.create("#particles", pos, _, _, self.scale_of_metaball)
+		ball.url = msg.url(msg.url(ball.id).socket, msg.url(ball.id).path, "collisionobject")
+		ball.sprite = msg.url(msg.url(ball.id).socket, msg.url(ball.id).path, "sprite")
+		ran = math.random(1,4)
+		local sprites = { "blood1", "blood2", "blood3", "blood4" }
+		sprite.play_flipbook(ball.sprite, sprites[ran])
+		sprite.set_constant(ball.sprite, "tint", vmath.vector4(100/255,3/255,10/255,1))
+
+		----------------
+		
+
+		-- Apply torque to a dynamic collision object component
+		function apply_torque(url, worldpos, t)
+			local rand = math.random(750,2000)
+			local dir = math.random(1,2)
+			local YVECT = vmath.vector3(0, rand, 0)
+			local NEG_YVECT = vmath.vector3(0, -rand, 0)
+			local XVECT = vmath.vector3(rand, 0, 0)
+			local NEG_XVECT = vmath.vector3(-rand, 0, 0)
+			if dir == 1 then 
+				local halft = t / 2
+				msg.post(url, "apply_force", { force = NEG_XVECT * halft, position = worldpos + NEG_YVECT })
+				msg.post(url, "apply_force", { force = XVECT * halft, position = worldpos + YVECT })
+			else
+				local halft = t / 2
+				msg.post(url, "apply_force", { force = NEG_XVECT * halft, position = worldpos + -NEG_YVECT })
+				msg.post(url, "apply_force", { force = XVECT * halft, position = worldpos + -YVECT })
+			end
+			
+		end
+		apply_torque(ball.id, vmath.vector3(), 1)
+
+
+		------------------
+		
+		table.insert(self.metaballs, ball)
+	end
+	--dry_metaballs(self)
+end
+
+local function set_force(self, force)
+	for _,metaball in ipairs(self.metaballs) do
+		msg.post(metaball.url, "apply_force", {force = force,
+		position = go.get_world_position(metaball.id)})
+		apply_torque(ball.id, vmath.vector3(), 1)
+	end
+end
+
+
+function init(self)
+	self.metaballs = {}
+	self.scabs = {}
+	if self.debug_physics then
+		msg.post("@system:", "toggle_physics_debug")
+	end
+	if self.create_at_init then
+		create_metaballs(self)
+	end
+	--msg.post("/defluid_plane", "change_color", { color = vmath.vector4(1,0,0,1) } )
+	timer.delay(6, false, function() 	-- after 6 s push up all metaballs
+		msg.post("/defluid", "force", { force = vmath.vector3(0,10000000,0) })
+	end)
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == ACTIVATE then
+		create_metaballs(self)
+
+	elseif message_id == CHANGE then
+		self.num_of_metaballs 	= message.num_of_metaballs 	or self.num_of_metaballs
+		self.emitter_width 		= message.emitter_width 	or self.emitter_width
+		self.emitter_height 	= message.emitter_height 	or self.emitter_height
+		self.dry_each_after 	= message.dry_each_after 	or self.dry_each_after
+
+	elseif message_id == FORCE then
+		set_force(self, message.force)
+
+	elseif message_id == DRY then
+		--dry_metaballs(self)
+
+	elseif message_id == REMOVE then
+		go.delete()
+
+	elseif message_id == hash("cast_scab") then
+		cast_scab(self)
+	end
+end
+
+function final(self)
+	if self.tim then timer.cancel(self.tim) end
+	if self.metaballs then
+		for _,metaball in ipairs(self.metaballs) do
+			go.delete(metaball)
+		end
+	end
+end

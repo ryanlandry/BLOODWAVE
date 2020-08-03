@@ -1,0 +1,190 @@
+local Mana = require "main/Modules/Mana_Positions"
+local Golem = require "main/Modules/Golem_Positions"
+
+local pos_grid = {16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
+G_SPEED = 1
+G_KILLED = 0
+G_ESCAPED = 0
+G_TIME = 0
+G_MANA = 0
+G_ACTIVE_MAPS = {}
+local w = 256
+local h = 320
+--defos.set_cursor_visible(false)
+--defos.set_view_size(x, y, 3*w, 3*h)
+msg.post("@render:", "resize", { width = 768, height = 960 } )
+defos.set_window_title("BLOODWAVE")
+function spawn_zombie(pos)
+	local x = math.random(1,15)
+	--330
+	for i = 1, #Golem.pos[1] do
+		factory.create("/Zombie_Spawner#Zombie_f", Golem.pos[1][i]+pos)
+	end
+	--factory.create("/Zombie_Spawner#Zombie_f", vmath.vector3(pos_grid[x]+8, 330, 0.5))
+end
+local particle_tints = {
+	vmath.vector4(27/150, 0, 0, 1),
+	vmath.vector4(42/150, 0, 0, 1),
+	vmath.vector4(48/150, 0, 0, 1),
+	vmath.vector4(56/150, 0, 0, 1),
+	vmath.vector4(83/150, 4/255, 4/255, 1)
+}
+
+
+
+local function drop_particles(gib, coll, height)
+	msg.post(coll, "enable")
+	timer.delay(height*0.0120*G_SPEED, false, function() go.delete(gib) end)
+	
+end
+
+local function spawn_particles(id)
+	local gibs = {}
+	for i = 1, 50 do
+		local pos = go.get_position(id)
+		local x = pos.x + math.random(-6, 6)
+		local y = pos.y + math.random(-8, 14)
+		local height = y - pos.y + 9
+		pos.x = x
+		pos.y = y
+		pos.z = 0.1
+		local gib = factory.create("/Golem_Particle_Spawner#Golem_Particles_f", pos)
+		local coll = msg.url(msg.url(gib).socket, msg.url(gib).path, "collisionobject")
+		local image = msg.url(msg.url(gib).socket, msg.url(gib).path, "sprite")
+		tint = math.random(1,5)
+		sprite.set_constant(image, "tint", particle_tints[tint])
+		msg.post(coll, "disable")
+		timer.delay(0.1, false, function() drop_particles(gib, coll, height) end)
+		gibs[i] = gib
+
+	end
+	
+end
+
+local function spawn_mana(pos)
+	pos = pos
+	local mana = factory.create("Mana_Spawner#Mana_f", pos)
+end
+
+function spawn_obstacle(self)
+	print("spawning Obstacle")
+	factory.create("/Floor_Spawner#Floor_f", vmath.vector3(0,320,-1))
+	local obstacle = factory.create("/Obstacle_Spawner#Obstacle_f", vmath.vector3(16, 384, 0.25))
+	local pos = go.get_position(obstacle)
+	for i = 1, #Mana.pos[1] do
+		spawn_mana(pos + Mana.pos[1][i])
+		msg.post(obstacle, "make_lights", { pos = pos } )
+	end
+	self.obstacle_height = 320
+	spawn_zombie(pos)
+	--timer.delay(2.5, false, function() spawn_obstacle() end )
+end
+
+local function spawn_road_sides()
+	factory.create("/Road_Sides_Spawner#Road_Sides_f", vmath.vector3(0, 319,-1))
+end
+
+local function spawn_floor(y)
+	factory.create("/Floor_Spawner#Floor_f", vmath.vector3(0, 319-y,-0.9))
+end
+
+
+
+function init(self)
+	sound.play("/Sound#Music")
+	msg.post("#", "acquire_input_focus")
+	--spawn_zombie()
+	spawn_obstacle(self)
+	--factory.create("/Road_Sides_Spawner#Road_Sides_f", vmath.vector3(0,0,-1))
+	factory.create("/Floor_Spawner#Floor_f", vmath.vector3(0,0,-1))
+	--[[local obstacle = factory.create("/Obstacle_Spawner#Obstacle_f", vmath.vector3(16, 0, 0.25))
+	local pos = go.get_position(obstacle)
+	for i = 1, #Mana.pos[1] do
+		spawn_mana(pos + Mana.pos[1][i])
+		msg.post(obstacle, "make_lights", { pos = pos } )
+	end--]]
+	self.obstacle_height = 320
+	self.current_row = 0
+	self.rows = {}
+	for i = 1, 16 do
+		self.rows[i] = {}
+		for j = 1, 16 do
+			self.rows[i][j] = false
+		end
+	end
+	self.pixels_scrolled = 0
+	self.obstacle_height = 320
+	
+end
+
+
+
+function final(self)
+	-- Add finalization code here
+	-- Learn more: https://defold.com/manuals/script/
+	-- Remove this function if not needed
+end
+
+
+
+
+function update(self, dt)
+	G_TIME = G_TIME + dt
+	label.set_text("/GUI#killed", "Killed: "..G_KILLED)
+	label.set_text("/GUI#escaped", "Escaped: "..G_ESCAPED)
+	label.set_text("/GUI#time", "Time: "..math.floor(G_TIME))
+	local ratio = G_KILLED/G_ESCAPED
+	if ratio >= 2 then
+		G_SPEED = 1
+	elseif ratio < 2 then
+		G_SPEED = 0.2/ratio + 1
+	end
+	if G_SPEED >=2 then G_SPEED = 2 end
+	self.pixels_scrolled = self.pixels_scrolled + G_SPEED*0.5
+	if self.pixels_scrolled >= self.obstacle_height then
+		self.pixels_scrolled = 0
+		spawn_obstacle(self)
+	end
+end
+
+function on_message(self, message_id, message, sender)
+	if message_id == hash("spawn_road_sides") then
+		spawn_road_sides()
+	end
+	if message_id == hash("spawn_floor") then
+		spawn_floor(message.y)
+	end
+	if message_id == hash("place_empty_enemy") then
+		msg.post("/defluid", "activate")
+	end
+	if message_id == hash("golem_death") then
+		spawn_particles(message.id)
+	end	
+	if message_id == hash("game_over") then
+		msg.post("Bootstrap:/Bootstrap", "restart")
+	end
+end
+
+function on_input(self, action_id, action)
+	if action_id == hash("A") then
+		msg.post("/Player", "move_left")
+	end
+	if action_id == hash("D") then
+		msg.post("/Player", "move_right")
+	end
+	if action_id == hash("W") then
+		msg.post("/Player", "move_up")
+	end
+	if action_id == hash("S") then
+		msg.post("/Player", "move_down")
+	end
+	if action_id == hash("S") and action.released then
+		msg.post("/Player", "stop_down")
+	end
+end
+
+function on_reload(self)
+	-- Add reload-handling code here
+	-- Learn more: https://defold.com/manuals/hot-reload/
+	-- Remove this function if not needed
+end

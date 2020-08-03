@@ -1,0 +1,2 @@
+prototype: "/main/GOs/Obstacles/Obstacle.go"
+load_dynamically: false

@@ -1,0 +1,44 @@
+[bootstrap]
+main_collection = /main/Bootstrap.collectionc
+render = /builtins/render/default.renderc
+
+[script]
+shared_state = 1
+
+[display]
+width = 256
+height = 320
+vsync = 1
+
+[android]
+input_method = HiddenInputField
+
+[project]
+title = MadeWithDefold
+dependencies = https://github.com/subsoap/defos/archive/master.zip,https://github.com/rgrams/rendercam/archive/v1.0.1.zip
+
+[graphics]
+default_texture_min_filter = nearest
+default_texture_mag_filter = nearest
+
+[physics]
+debug = 0
+scale = 1.0
+max_collisions = 4096
+max_contacts = 4096
+gravity_y = -1000.0
+gravity_z = 0.0
+gravity_x = 0.0
+
+[tilemap]
+max_tile_count = 4096
+
+[sprite]
+max_count = 1204
+subpixels = 0
+
+[html5]
+scale_mode = fit
+htmlfile = /builtins/manifests/web/engine_template.html
+cssfile = /builtins/manifests/web/dark_theme.css
+

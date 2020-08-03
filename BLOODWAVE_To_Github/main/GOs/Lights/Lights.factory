@@ -1,0 +1,2 @@
+prototype: "/main/GOs/Lights/Light.go"
+load_dynamically: false
